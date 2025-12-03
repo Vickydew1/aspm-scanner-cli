@@ -12,9 +12,10 @@ class ContainerScanner:
     ak_container_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/aquasec/trivy:0.65.0")
     result_file = './results.json'
 
-    def __init__(self, command, container_mode=False):
+    def __init__(self, command, container_mode=False, generate_sbom: bool = False):
         self.command = command
         self.container_mode = container_mode
+        self.generate_sbom = generate_sbom
 
     def run(self):
         try:
@@ -37,6 +38,12 @@ class ContainerScanner:
                 sanitized_stderr = result.stderr.replace("trivy", "[scanner]")
                 Logger.get_logger().error(sanitized_stderr)
 
+            if self.generate_sbom:
+                # SBOM mode: Always use self.result_file (forced to ./results.json)
+                if os.path.exists(self.result_file):
+                    return result.returncode, self.result_file
+                return result.returncode, None
+
             if not os.path.exists(self.result_file):
                 return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
 
@@ -54,8 +61,26 @@ class ContainerScanner:
         """
         Parses the raw command, strips forbidden arguments, and enforces
         the required output format and file. This ensures the class can
-        reliably find the JSON output.
+        reliably find the JSON output for vulnerability scans.
         """
+        if self.generate_sbom:
+            # SBOM mode: Force cyclonedx format and JSON output
+            original_args = shlex.split(self.command or "")
+            # Strip any existing format/output flags
+            flags_to_strip = {"-o", "--output", "-f", "--format"}
+            sanitized_args = []
+            i = 0
+            while i < len(original_args):
+                arg = original_args[i]
+                if arg in flags_to_strip:
+                    i += 2  # Skip flag and value
+                    continue
+                sanitized_args.append(arg)
+                i += 1
+            # Force cyclonedx format and JSON output
+            sanitized_args.extend(["-f", "cyclonedx", "-o", self.result_file])
+            return None, sanitized_args
+
         # Flags that take a value and should be removed.
         flags_to_strip = {"-s", "--severity", "-o", "--output", "-f", "--format", "--exit-code", "--quiet"}
         severity_threshold = None
@@ -109,3 +134,4 @@ class ContainerScanner:
         except Exception as e:
             Logger.get_logger().error(f"Error reading scan results: {e}")
             raise
+
