@@ -29,6 +29,8 @@ class SASTScanner(BaseScanner):
         parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
         parser.add_argument("--pipeline-id", help="Pipeline ID for scanning")
         parser.add_argument("--job-url", help="Job URL for scanning")
+        parser.add_argument("--ai-analysis", action="store_true", help="Enable AI analysis of results")
+        parser.add_argument("--antropic-api-key", help="Anthropic API key for AI analysis")
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_sast_scan(
@@ -38,7 +40,15 @@ class SASTScanner(BaseScanner):
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
         scanner = OriginalSASTScanner(
-            args.command, args.container_mode, args.severity, args.repo_url,
-            args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url
+            command=args.command,
+            container_mode=args.container_mode,
+            severity=args.severity,
+            repo_url=args.repo_url,
+            commit_ref=args.commit_ref,
+            commit_sha=args.commit_sha,
+            pipeline_id=args.pipeline_id,
+            job_url=args.job_url,
+            antropic_api_key=getattr(args, 'antropic_api_key', None),
+            ai_analysis=args.ai_analysis
         )
         return scanner.run()
