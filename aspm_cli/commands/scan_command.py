@@ -114,7 +114,14 @@ class ScanCommand(BaseCommand):
                 else:
                     # Clean up result file when skipping upload
                     os.remove(result_file)
-            handle_failure(exit_code if exit_code != 0 else upload_exit_code, softfail)
+            Logger.get_logger().debug(
+                f"Scan exit_code={exit_code}, upload_exit_code={upload_exit_code}, softfail={softfail}, skip_upload={skip_upload}"
+            )
+            if upload_exit_code != 0:
+                # Upload issues should always fail the workflow; softfail applies only to findings
+                handle_failure(upload_exit_code, softfail=False, allow_softfail=False)
+            else:
+                handle_failure(exit_code, softfail, allow_softfail=True)
 
         except ValidationError as e:
             Logger.get_logger().error(f"Configuration validation error: {e}")

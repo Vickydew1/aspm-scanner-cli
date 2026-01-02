@@ -104,14 +104,21 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type):
             os.remove(file_path) # Clean up result file after attempt
     return upload_exit_code
 
-def handle_failure(exit_code: int, softfail: bool):
-    """Handles the exit code of a scan, potentially exiting based on softfail."""
+def handle_failure(exit_code: int, softfail: bool, allow_softfail: bool = True):
+    """
+    Handles the exit code of an operation.
+    The softfail flag is only honored when allow_softfail is True.
+    """
+    Logger.get_logger().debug(
+        f"handle_failure invoked: exit_code={exit_code}, "
+        f"softfail={softfail}, allow_softfail={allow_softfail}"
+    )
     if exit_code != 0:
-        message = f"Scan completed with non-zero exit code: {exit_code}."
-        if softfail:
+        message = f"Completed with non-zero exit code: {exit_code}."
+        if softfail and allow_softfail:
             Logger.log_with_color('WARNING', f"{message} (Soft fail enabled, continuing.)", Fore.YELLOW)
         else:
             Logger.log_with_color('ERROR', f"{message} (Hard fail enabled, exiting.)", Fore.RED)
             sys.exit(exit_code)
     else:
-        Logger.log_with_color('INFO', "Scan completed successfully with exit code 0.", Fore.GREEN)
+        Logger.log_with_color('INFO', "Completed successfully with exit code 0.", Fore.GREEN)
