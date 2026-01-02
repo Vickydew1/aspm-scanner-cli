@@ -18,7 +18,12 @@ class AccuknoxConfig(BaseModel):
     accuknox_label: Optional[str] = Field(None, env="ACCUKNOX_LABEL", description="AccuKnox label for scan results")
     accuknox_token: Optional[str] = Field(None, env="ACCUKNOX_TOKEN", description="AccuKnox authentication token")
     skip_upload: bool = Field(False) 
-    accuknox_tenant: Optional[int]
+    accuknox_tenant: Optional[int] = None
+    accuknox_project_name: Optional[str] = Field(
+        None,
+        env="ACCUKNOX_PROJECT_NAME",
+        description="AccuKnox project name (required for SBOM uploads)",
+    )
 
     @model_validator(mode='after') 
     def check_env_vars_and_upload_requirements(self) -> 'AccuknoxConfig':
@@ -29,6 +34,13 @@ class AccuknoxConfig(BaseModel):
             self.accuknox_label = os.environ["ACCUKNOX_LABEL"]
         if self.accuknox_token is None and "ACCUKNOX_TOKEN" in os.environ:
             self.accuknox_token = os.environ["ACCUKNOX_TOKEN"]
+
+        # Prefer ACCUKNOX_PROJECT_NAME, but fall back to legacy ACCUKNOX_PROJECT for backwards compatibility
+        if self.accuknox_project_name is None:
+            if "ACCUKNOX_PROJECT_NAME" in os.environ:
+                self.accuknox_project_name = os.environ["ACCUKNOX_PROJECT_NAME"]
+            elif "ACCUKNOX_PROJECT" in os.environ:
+                self.accuknox_project_name = os.environ["ACCUKNOX_PROJECT"]
 
         # Check required for upload (equivalent to V1 validator for multiple fields)
         if not self.skip_upload:

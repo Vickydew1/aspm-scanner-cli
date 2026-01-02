@@ -13,6 +13,16 @@ from aspm_cli.utils.spinner import Spinner
 # Moved from original main.py
 ALLOWED_SCAN_TYPES = ["iac", "sq-sast", "secret", "container", "sast", "dast"]
 
+def _build_endpoint_url(endpoint, api_path):
+    """
+    Build the full URL for API requests.
+    If endpoint already includes protocol (http:// or https://), use it as-is.
+    Otherwise, prepend https:// for production endpoints.
+    """
+    if endpoint.startswith(("http://", "https://")):
+        return f"{endpoint}{api_path}"
+    return f"https://{endpoint}{api_path}"
+
 def clean_env_vars():
     """Removes surrounding quotes from all environment variables."""
     for key, value in os.environ.items():
@@ -34,9 +44,14 @@ def print_banner():
 def upload_results(file_path, endpoint, label, token, tenant_id, data_type):
     upload_exit_code = 1
     """Uploads scan results to the AccuKnox endpoint."""
+    
+    if not data_type:
+        Logger.get_logger().error("data_type is required for artifact uploads")
+        return upload_exit_code
+    
     if not os.path.exists(file_path):
         Logger.get_logger().warning(f"Result file not found: {file_path}. Skipping upload.")
-        return
+        return upload_exit_code
 
     Logger.get_logger().info(f"Uploading scan results from {file_path} to {endpoint}...")
     headers = {
@@ -44,6 +59,7 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type):
     }
     if tenant_id:
         headers["Tenant-Id"] = tenant_id
+    api_path = "/api/v1/artifact/"
     params = {
         "data_type": data_type,
         "label_id": label
@@ -56,8 +72,9 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type):
         spinner.start()
 
         with open(file_path, 'rb') as file:
+            url = _build_endpoint_url(endpoint, api_path)
             response = requests.post(
-                f"https://{endpoint}/api/v1/artifact/",
+                url,
                 headers=headers,
                 params=params,
                 files={"file": file},

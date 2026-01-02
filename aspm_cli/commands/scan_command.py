@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from pydantic import ValidationError
 
 from aspm_cli.commands.base_command import BaseCommand
@@ -20,6 +21,11 @@ class ScanCommand(BaseCommand):
         parser.add_argument("--label", help="The label created in AccuKnox for associating scan results.")
         parser.add_argument("--token", help="The token for authenticating with the Control Panel.")
         parser.add_argument("--tenant", help="Tenant ID [Optional]")
+        parser.add_argument(
+            "--project-name",
+            dest="project_name",
+            help="Project name (AccuKnox entity) - Required for SBOM uploads",
+        )
         parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
         parser.add_argument('--skip-upload', action='store_true', help='Skip control plane upload')
 
@@ -40,6 +46,8 @@ class ScanCommand(BaseCommand):
                 "accuknox_label": args.label or os.getenv("ACCUKNOX_LABEL"),
                 "accuknox_token": args.token or os.getenv("ACCUKNOX_TOKEN"),
                 "accuknox_tenant": args.tenant or os.getenv("ACCUKNOX_TENANT"),
+                "accuknox_project_name": args.project_name
+                or os.getenv("ACCUKNOX_PROJECT"),
             }
 
             # Get the correct scanner strategy from the registry
@@ -65,12 +73,47 @@ class ScanCommand(BaseCommand):
 
             # Upload results and handle failure
             upload_exit_code = 0
-            if not skip_upload and result_file:
-                upload_exit_code = upload_results(result_file, accuknox_config["accuknox_endpoint"], accuknox_config["accuknox_label"], accuknox_config["accuknox_token"], accuknox_config["accuknox_tenant"], scanner.data_type_identifier)
-            elif result_file and os.path.exists(result_file):
-                os.remove(result_file)
-            else:
-                pass # No result file or skip upload, nothing to do with it
+            if result_file and os.path.exists(result_file):
+                # Check if this is SBOM mode (container scan with --generate-sbom)
+                is_sbom_upload = (
+                    args.scantype.lower() == "container"
+                    and getattr(args, "generate_sbom", False)
+                )
+
+                # If this is an SBOM upload, enrich the SBOM file with project_name and classifier
+                if is_sbom_upload:
+                    project_name = accuknox_config.get("accuknox_project_name")
+                    try:
+                        with open(result_file, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+
+                        if isinstance(data, dict):
+                            if project_name:
+                                data["project_name"] = project_name
+                            data["project_classifier"] = "container"
+
+                            with open(result_file, "w", encoding="utf-8") as f:
+                                json.dump(data, f, indent=2)
+                    except Exception as e:
+                        Logger.get_logger().debug(
+                            f"Failed to enrich SBOM results.json with project_name/classifier: {e}"
+                        )
+
+                # Upload if not skipping
+                if not skip_upload:
+                    # Determine data_type: SBOM for SBOM uploads, otherwise use scanner's identifier
+                    data_type = "SBOM" if is_sbom_upload else scanner.data_type_identifier
+                    upload_exit_code = upload_results(
+                        result_file,
+                        accuknox_config["accuknox_endpoint"],
+                        accuknox_config["accuknox_label"],
+                        accuknox_config["accuknox_token"],
+                        accuknox_config["accuknox_tenant"],
+                        data_type,
+                    )
+                else:
+                    # Clean up result file when skipping upload
+                    os.remove(result_file)
             handle_failure(exit_code if exit_code != 0 else upload_exit_code, softfail)
 
         except ValidationError as e:

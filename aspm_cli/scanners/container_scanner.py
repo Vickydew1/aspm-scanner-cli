@@ -19,11 +19,17 @@ class ContainerScanner(BaseScanner):
             action="store_true",
             help="Run in container mode"
         )
+        parser.add_argument(
+            "--generate-sbom",
+            action="store_true",
+            help="Generate SBOM instead of running a vulnerability scan"
+        )
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_container_scan(args.command, args.container_mode)
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
         # Instantiate and run the original scanner logic
-        scanner = OriginalContainerScanner(args.command, args.container_mode)
+        generate_sbom = getattr(args, "generate_sbom", False)
+        scanner = OriginalContainerScanner(args.command, args.container_mode, generate_sbom=generate_sbom)
         return scanner.run()
