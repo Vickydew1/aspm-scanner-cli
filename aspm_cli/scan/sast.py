@@ -17,7 +17,7 @@ class SASTScanner:
 
     def __init__(self, command=None, container_mode=True, severity = None,
                  repo_url=None, commit_ref=None, commit_sha=None,
-                 pipeline_id=None, job_url=None, antropic_api_key=None, ai_analysis=False):
+                 pipeline_id=None, job_url=None, anthropic_api_key=None, ai_analysis=False):
         """
         :param command: Raw OpenGrep CLI args (string)
         :param container_mode: Run in Docker if True, else use local binary
@@ -26,7 +26,7 @@ class SASTScanner:
         :param commit_sha: Commit SHA
         :param pipeline_id: CI pipeline ID
         :param job_url: CI job URL
-        :param antropic_api_key: Anthropic API key for AI analysis
+        :param anthropic_api_key: Anthropic API key for AI analysis
         :param ai_analysis: Enable AI analysis of results
         """
         self.command = command
@@ -37,7 +37,7 @@ class SASTScanner:
         self.commit_sha = commit_sha
         self.pipeline_id = pipeline_id
         self.job_url = job_url
-        self.antropic_api_key = antropic_api_key or os.getenv("ANTHROPIC_API_KEY")
+        self.anthropic_api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
         self.ai_analysis = ai_analysis
 
     def run(self):
@@ -101,7 +101,7 @@ class SASTScanner:
         This ensures the scan continues successfully even if AI analysis fails.
         """
         try:
-            if not self.antropic_api_key:
+            if not self.anthropic_api_key:
                 Logger.get_logger().warning("Anthropic API key not provided. Skipping AI analysis.")
                 return
             
@@ -258,7 +258,7 @@ class SASTScanner:
         else:
             cmd = [
                 "docker", "run", "--rm",
-                "-e", f"ANTHROPIC_API_KEY={self.antropic_api_key}",
+                "-e", f"ANTHROPIC_API_KEY={self.anthropic_api_key}",
                 "-e", "CLAUDE_CODE_MAX_OUTPUT_TOKENS=200000",
                 "-v", f"{os.getcwd()}:/workspace",
                 self.claude_image,
