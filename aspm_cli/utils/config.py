@@ -4,6 +4,10 @@ from typing import Optional, Literal
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.common import ALLOWED_SCAN_TYPES
 
+# Return code constants
+PASS_RETURN_CODE = 0
+SOMETHING_WENT_WRONG_RETURN_CODE = 1
+
 def _format_validation_error(e: ValidationError) -> str:
     """Return a concise error summary (no verbose Pydantic metadata)."""
     errors = []

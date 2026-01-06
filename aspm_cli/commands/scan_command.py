@@ -28,6 +28,7 @@ class ScanCommand(BaseCommand):
         )
         parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
         parser.add_argument('--skip-upload', action='store_true', help='Skip control plane upload')
+        parser.add_argument('--keep-results', action='store_true', help='Keep scan results file after completion')
 
         # Dynamically add subparsers for each registered scanner
         for scan_type, scanner_class in scanner_registry.items():
@@ -40,6 +41,7 @@ class ScanCommand(BaseCommand):
         try:
             softfail = args.softfail or os.getenv("SOFT_FAIL") == "TRUE"
             skip_upload = args.skip_upload
+            keep_results = args.keep_results or os.getenv("KEEP_RESULTS") == "TRUE"
 
             accuknox_config = {
                 "accuknox_endpoint": args.endpoint or os.getenv("ACCUKNOX_ENDPOINT"),
@@ -110,12 +112,16 @@ class ScanCommand(BaseCommand):
                         accuknox_config["accuknox_token"],
                         accuknox_config["accuknox_tenant"],
                         data_type,
+                        keep_file=keep_results,
                     )
                 else:
-                    # Clean up result file when skipping upload
-                    os.remove(result_file)
+                    # Clean up result file when skipping upload (unless --keep-results is set)
+                    if not keep_results:
+                        os.remove(result_file)
+                    else:
+                        Logger.get_logger().info(f"Results file kept at: {result_file}")
             Logger.get_logger().debug(
-                f"Scan exit_code={exit_code}, upload_exit_code={upload_exit_code}, softfail={softfail}, skip_upload={skip_upload}"
+                f"Scan exit_code={exit_code}, upload_exit_code={upload_exit_code}, softfail={softfail}, skip_upload={skip_upload}, keep_results={keep_results}"
             )
             if upload_exit_code != 0:
                 # Upload issues should always fail the workflow; softfail applies only to findings

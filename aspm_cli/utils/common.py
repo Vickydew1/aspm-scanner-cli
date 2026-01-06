@@ -5,6 +5,7 @@ import urllib3
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import json
+import logging
 from colorama import Fore
 
 from aspm_cli.utils.logger import Logger
@@ -41,19 +42,20 @@ def print_banner():
         # Skipping if there are any issues with Unicode chars
         print(Fore.BLUE + "ACCUKNOX ASPM SCANNER")
 
-def upload_results(file_path, endpoint, label, token, tenant_id, data_type):
+def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep_file=False):
     upload_exit_code = 1
     """Uploads scan results to the AccuKnox endpoint."""
+    logger = Logger.get_logger()
     
     if not data_type:
-        Logger.get_logger().error("data_type is required for artifact uploads")
+        logger.error("data_type is required for artifact uploads")
         return upload_exit_code
     
     if not os.path.exists(file_path):
-        Logger.get_logger().warning(f"Result file not found: {file_path}. Skipping upload.")
+        logger.warning(f"Result file not found: {file_path}. Skipping upload.")
         return upload_exit_code
 
-    Logger.get_logger().info(f"Uploading scan results from {file_path} to {endpoint}...")
+    logger.info(f"Uploading scan results from {file_path} to {endpoint}...")
     headers = {
         "Authorization": f"Bearer {token}"
     }
@@ -66,6 +68,14 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type):
     }
     if tenant_id:
         params["tenant_id"] = tenant_id
+
+    # Log request details when DEBUG is enabled
+    if logger.level == logging.DEBUG:
+        url = _build_endpoint_url(endpoint, api_path)
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        logger.debug(f"Upload URL: {url}")
+        logger.debug(f"File: {file_path} ({file_size} bytes)")
+        logger.debug(f"Parameters: {params}")
 
     spinner = Spinner(message="Uploading scan results...")
     try:
@@ -84,24 +94,51 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type):
 
         spinner.stop()
         Logger.log_with_color('INFO', "Scan results uploaded successfully!", Fore.GREEN)
-        Logger.get_logger().debug(f"Response: {response.json()}")
+        if logger.level == logging.DEBUG:
+            logger.debug(f"Response: {response.json()}")
         upload_exit_code = 0
 
     except requests.exceptions.Timeout:
         spinner.stop()
-        Logger.get_logger().error("Upload timed out after 60 seconds.")
+        logger.error("Upload timed out after 60 seconds.")
+        if logger.level == logging.DEBUG:
+            logger.debug(f"Endpoint: {endpoint}")
+
+    except requests.exceptions.SSLError as e: 
+        spinner.stop()
+        logger.error(f"SSL error occurred during upload: {e}")
+        if logger.level == logging.DEBUG:
+            logger.debug(f"SSL Error Type: {type(e).__name__}")
+            logger.debug(f"Endpoint: {endpoint}")
+
+    except requests.exceptions.ConnectionError as e:
+        spinner.stop()
+        logger.error(f"Connection error occurred during upload: {e}")
+        if logger.level == logging.DEBUG:
+            logger.debug(f"Connection Error Type: {type(e).__name__}")
+            logger.debug(f"Endpoint: {endpoint}")
+
     except requests.exceptions.RequestException as e:
         spinner.stop()
-        Logger.get_logger().error(f"Failed to upload scan results: {e}")
+        logger.error(f"Failed to upload scan results: {e}")
         if hasattr(e, 'response') and e.response is not None:
-            Logger.get_logger().error(f"Response status: {e.response.status_code}")
-            Logger.get_logger().error(f"Response body: {e.response.text}")
+            logger.error(f"Response status: {e.response.status_code}")
+            logger.error(f"Response body: {e.response.text}")
+
     except Exception as e:
         spinner.stop()
-        Logger.get_logger().error(f"An unexpected error occurred during upload: {e}")
+        logger.error(f"An unexpected error occurred during upload: {e}")
+        if logger.level == logging.DEBUG:
+            logger.debug(f"Error Type: {type(e).__name__}")
+
     finally:
         if os.path.exists(file_path):
-            os.remove(file_path) # Clean up result file after attempt
+            if not keep_file:
+                os.remove(file_path)
+            else:
+                logger = Logger.get_logger()
+                logger.info(f"Results file kept at: {file_path}")
+    
     return upload_exit_code
 
 def handle_failure(exit_code: int, softfail: bool, allow_softfail: bool = True):
