@@ -157,8 +157,18 @@ class SASTScanner:
                 else:
                     data = {}
 
-            path = urlparse(self.repo_url).path  # e.g., /org/repo.git
-            repo_name = os.path.basename(path).replace(".git", "")
+            # Extract repo name from URL or use directory name as fallback
+            if self.repo_url and self.repo_url.strip():
+                try:
+                    path = urlparse(self.repo_url).path  # e.g., /org/repo.git
+                    repo_name = os.path.basename(path).replace(".git", "")
+                except Exception as e:
+                    raise ValueError(f"Invalid repository URL format: {self.repo_url}. Error: {e}")
+            else:
+                # Fallback: Use directory name when Git is not available
+                repo_name = os.path.basename(os.getcwd())
+                self.repo_url = f"localhost/{repo_name}"  
+                Logger.get_logger().info(f"Git not available, using directory name '{repo_name}' as repo identifier")
 
             # Merge metadata into root
             data.update({
@@ -178,7 +188,7 @@ class SASTScanner:
 
         except Exception as e:
             Logger.get_logger().debug(f"Error processing result file: {e}")
-            Logger.get_logger().error(f"Error during IaC scan: {e}")
+            Logger.get_logger().error(f"Error during SAST scan: {e}")
             raise
 
 
