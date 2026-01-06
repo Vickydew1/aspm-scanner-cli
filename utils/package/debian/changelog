@@ -1,3 +1,11 @@
+aspm-scanner-cli (0.14.0) unstable; urgency=medium
+
+  * Add --keep-results flag to keep scan results file after completion
+  * Enhance debug logging for upload operations
+  * Fix repo_url handling for on-premise scenarios
+
+ -- AccuKnox <accuknox@accuknox.com>  Wed, 08 Jan 2025 10:30:00 +0530
+
 aspm-scanner-cli (0.13.8) unstable; urgency=medium
 
   * Initial release
