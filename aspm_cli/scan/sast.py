@@ -254,7 +254,7 @@ class SASTScanner:
 
 
         if not self.container_mode:
-            cmd = ["claude", "--dangerously-skip-permissions", "--system-prompt", system_prompt, user_prompt]
+            cmd = ["claude", "--system-prompt", system_prompt, user_prompt]
         else:
             cmd = [
                 "docker", "run", "--rm",
@@ -262,7 +262,7 @@ class SASTScanner:
                 "-e", "CLAUDE_CODE_MAX_OUTPUT_TOKENS=200000",
                 "-v", f"{os.getcwd()}:/workspace",
                 self.claude_image,
-                "claude", "--dangerously-skip-permissions", "--system-prompt", system_prompt, user_prompt
+                "claude", "--system-prompt", system_prompt, user_prompt
             ]
 
         return cmd    
