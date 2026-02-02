@@ -399,20 +399,35 @@ class SASTScanner:
         cmd.extend(args)
         return cmd
 
-    def _severity_threshold_met(self):
-        try:
-            with open(self.result_file, 'r') as f:
-                data = json.load(f)
-
-            # Ensure "results" exists
-            results = data.get("results", [])
-            for result in results:
-                # Extract severity from extra
-                severity = result.get("extra", {}).get("severity", "").upper()
-                if severity in self.severity:
-                    return True
-            return False
-
-        except Exception as e:
-            Logger.get_logger().error(f"Error reading scan results: {e}")
+    def _severity_threshold_met(self):  
+        if not self.severity:  
+            return False  
+    
+        # Create threshold set from self.severity (already a list)  
+        impact_thresholds = {s.strip().upper() for s in self.severity if s.strip()}  
+    
+        try:  
+            with open(self.result_file, 'r') as f:  
+                data = json.load(f)  
+    
+            for result in data.get("results", []):  
+                extra = result.get("extra", {})  
+                metadata = extra.get("metadata", {})  
+    
+                impact = metadata.get("impact")  
+                if not impact:  
+                    continue  
+    
+                impact = impact.upper()  
+    
+                if impact in impact_thresholds:  
+                    Logger.get_logger().error(  
+                        f"SAST failed due to severity={impact}"  
+                    )  
+                    return True  
+            return False  
+    
+        except Exception as e:  
+            Logger.get_logger().error(f"Error reading scan results: {e}")  
             raise
+  
