@@ -400,17 +400,26 @@ class SASTScanner:
         return cmd
 
     def _severity_threshold_met(self):
+        # Do nothing if user did not provide --severity
         if not self.severity:
             return False
 
-        impact_thresholds = {
-            s.strip().upper()
-            for s in self.severity.split(",")
-            if s.strip()
-        }
+        # Normalize severity input (string or list)
+        if isinstance(self.severity, str):
+            impact_thresholds = {
+                s.strip().upper()
+                for s in self.severity.split(",")
+                if s.strip()
+            }
+        else:
+            impact_thresholds = {
+                str(s).strip().upper()
+                for s in self.severity
+                if str(s).strip()
+            }
 
         try:
-            with open(self.result_file, 'r') as f:
+            with open(self.result_file, "r") as f:
                 data = json.load(f)
 
             for result in data.get("results", []):
@@ -425,7 +434,7 @@ class SASTScanner:
 
                 if impact in impact_thresholds:
                     Logger.get_logger().error(
-                        f"SAST failed due to impact={impact}"
+                        f"SAST failed due to severity found={impact}"
                     )
                     return True
 
@@ -434,4 +443,3 @@ class SASTScanner:
         except Exception as e:
             Logger.get_logger().error(f"Error reading scan results: {e}")
             raise
-  
