@@ -24,7 +24,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7/accuknox_aspm_scanner-0.14.7-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.9/accuknox_aspm_scanner-0.14.9-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -48,7 +48,7 @@ Install the cross-platform Python wheel (same as connected environment above), o
 ```bash
 # Linux x86_64
 curl -fL -o accuknox-aspm-scanner \
-  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7/accuknox-aspm-scanner-linux-amd64
+  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.9/accuknox-aspm-scanner-linux-amd64
 chmod +x accuknox-aspm-scanner
 ```
 
@@ -552,16 +552,22 @@ Upload uses `data_type=API`. Output is code2api JSON (`internal_apis`, `external
 
 ### DAST Scan
 
-Use for OWASP ZAP-based scanning.
+Use for OWASP ZAP-based scanning. Full guide, including authenticated scans and the ZAP
+Automation Framework plan format: [`docs/dast-scan.md`](docs/dast-scan.md).
 
-Required:
-
-- `--command`
+Required: one of `--command` or `--zap-plan`.
 
 Flags used after `dast`:
 
 - `--severity-threshold`
-- `--container-mode`
+- `--container-mode` (required for `--auth-*` and `--zap-plan`)
+- `--zap-plan`: path to a ZAP Automation Framework plan (`zap.yaml`) to run as-is instead of
+  `--command`/`--auth-*` — full control over jobs (spiderAjax, activeScan, passive rule config,
+  auth or unauth). Mutually exclusive with `--auth-*`. Template: [`docs/examples/zap-plan-template.yaml`](docs/examples/zap-plan-template.yaml).
+- `--auth-url`, `--auth-username`, `--auth-password`: log in with a real headless browser before
+  spidering/scanning (works for plain HTML forms and JS/SPA logins like OWASP Juice Shop).
+- `--auth-logged-in-regex`, `--auth-logged-out-regex`, `--auth-login-fallback-url`: optional
+  session-verification settings for the authenticated flow above.
 
 Typical `--command` value:
 
@@ -582,6 +588,25 @@ ACCUKNOX_ENDPOINT=cspm.accuknox.com \
 ACCUKNOX_LABEL=POC \
 ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan dast --command "zap-baseline.py -t http://example.com/ -I" --container-mode
+```
+
+Authenticated scan:
+
+```bash
+accuknox-aspm-scanner scan dast \
+  --command "zap-baseline.py -t https://example.com -m 5" \
+  --container-mode \
+  --auth-url "https://example.com/login" \
+  --auth-username "user@example.com" \
+  --auth-password "..." \
+  --auth-login-fallback-url "https://example.com/account" \
+  --auth-logged-in-regex "user@example\.com"
+```
+
+Bring-your-own ZAP plan (see [`docs/dast-scan.md`](docs/dast-scan.md) for the full job reference):
+
+```bash
+accuknox-aspm-scanner scan dast --zap-plan ./zap.yaml --container-mode
 ```
 
 ### SonarQube SAST Scan
