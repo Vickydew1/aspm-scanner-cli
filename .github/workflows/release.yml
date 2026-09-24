@@ -336,8 +336,6 @@ jobs:
             -w /src \
             python:3.10-bullseye \
             bash -euo pipefail -c '
-              apt-get update
-              apt-get install -y --no-install-recommends git
               python -m pip install --upgrade pip pipenv
               pipenv install
               pipenv run pip install pyinstaller
