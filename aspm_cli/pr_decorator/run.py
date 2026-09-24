@@ -101,5 +101,16 @@ def run(result_paths, scan_types=None, changed_files=None, mode="advisory",
         logger.info(f"{skipped} finding(s) already posted in a prior run, skipped; "
                      f"{len(new_findings)} new inline comment(s).")
 
-    provider.post_review(summary_body, event, comments, dry_run)
+    # Short, not summary_body again: the summary issue comment is the one
+    # "living" copy that gets updated in place every run. A review's own
+    # body is never updated or deduped on a re-run - reusing summary_body
+    # here would post the *entire* summary a second time in the PR timeline
+    # today, and again on every future run (unbounded growth, since each
+    # review is a new object, unlike the summary comment).
+    displayed_total = len([f for f in findings if f["severity"] != "UNKNOWN"])
+    review_body = (f"\U0001F6E1️ **AccuKnox Security Review** - {displayed_total} finding(s) "
+                    f"({len(new_findings)} new in this run). See the summary comment above for the "
+                    f"full breakdown.")
+
+    provider.post_review(review_body, event, comments, dry_run)
     return 0
