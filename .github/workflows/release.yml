@@ -9,9 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Existing GitHub release tag to update (e.g. v0.14.7)'
+        description: 'Existing GitHub release tag to update (e.g. v0.14.7). Unused when linux_only is checked.'
         required: true
         default: 'v0.14.7'
+      linux_only:
+        description: 'Build just the Linux binary as a downloadable workflow artifact - no tag, no GitHub Release, no Windows/macOS/deb builds. For pre-production testing.'
+        type: boolean
+        default: false
 
 env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
@@ -312,3 +316,40 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
             utils/*-windows-*.tar.gz
+
+  # Manual-only, pre-production test build: just the Linux binary, as a
+  # workflow artifact. No tag, no GitHub Release, no Windows/macOS/deb -
+  # entirely separate from the jobs above so a test build can never touch
+  # the real release pipeline.
+  linux-only-test-build:
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_only
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Linux executable (Debian 11 / glibc 2.31)
+        run: |
+          docker run --rm \
+            -v "$PWD":/src \
+            -w /src \
+            python:3.10-bullseye \
+            bash -euo pipefail -c '
+              apt-get update
+              apt-get install -y --no-install-recommends git
+              python -m pip install --upgrade pip pipenv
+              pipenv install
+              pipenv run pip install pyinstaller
+              pipenv run pyinstaller accuknox-aspm-scanner.spec
+            '
+
+      - name: Test Binary
+        run: ./dist/accuknox-aspm-scanner --help
+
+      - name: Upload Linux binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: accuknox-aspm-scanner-linux-amd64
+          retention-days: 7
+          path: dist/accuknox-aspm-scanner

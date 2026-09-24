@@ -62,3 +62,11 @@ class GitInfo:
     def get_commit_sha() -> str | None:
         """Retrieves the full commit SHA."""
         return GitInfo._run_git_command(['rev-parse', 'HEAD'])
+
+    @staticmethod
+    def get_changed_files(base_ref: str, head_ref: str = "HEAD") -> list[str] | None:
+        """Files changed between base_ref and head_ref (e.g. a PR's base/head
+        SHA), for scoping findings to the diff. None if the diff couldn't be
+        computed (e.g. base_ref not fetched - shallow checkout)."""
+        out = GitInfo._run_git_command(['diff', '--name-only', base_ref, head_ref])
+        return out.splitlines() if out is not None else None
