@@ -9,6 +9,7 @@ from aspm_cli.utils.logger import Logger
 
 from .adapters import load_all_findings
 from .detect import detect_pr_context
+from .pr_summary import build_file_changes, generate_pr_narrative, render_extra_sections
 from .providers import PROVIDERS
 from .remediation import DEFAULT_BASE_URL, DEFAULT_MODEL, enrich_with_remediation
 from .render import compute_event, render_inline_comment, render_summary_comment
@@ -68,14 +69,24 @@ def run(result_paths, scan_types=None, changed_files=None, mode="advisory",
 
     provider = provider_cls(repo=ctx.repo, pr_id=ctx.pr_id, head_sha=ctx.head_sha, token=token)
 
-    summary_body = render_summary_comment(findings, meta, thresholds)
+    # PR-level enrichment (changed-files table, AI narrative, findings-by-file
+    # diagram) - each piece degrades to nothing on its own (no base_sha, no
+    # LLM key, network failure), never blocks posting the real findings.
+    file_changes = build_file_changes(ctx.base_sha, ctx.head_sha) if ctx.base_sha else None
+    narrative = generate_pr_narrative(file_changes, findings, llm_api_key, llm_model, llm_base_url)
+    extra_sections = render_extra_sections(file_changes, narrative, findings)
+
+    summary_body = render_summary_comment(findings, meta, thresholds, extra_sections=extra_sections)
     provider.post_or_update_summary(summary_body, dry_run)
 
     # Dry run has no token guarantee and no real PR to check against, so it
     # can't know what's already posted - treat everything as new.
     posted_fps = set() if dry_run else provider.find_posted_fingerprints()
-    new_findings = [f for f in findings if f["fingerprint"] not in posted_fps]
-    skipped = len(findings) - len(new_findings)
+    # UNKNOWN findings (Checkov's unrated noise, see render.DISPLAYED_SEVERITIES)
+    # don't get their own inline thread either - same reasoning as the summary.
+    new_findings = [f for f in findings
+                     if f["fingerprint"] not in posted_fps and f["severity"] != "UNKNOWN"]
+    skipped = len([f for f in findings if f["severity"] != "UNKNOWN"]) - len(new_findings)
 
     event = compute_event(findings, mode)
     comments = [{"path": f["path"], "line": f["start_line"], "body": render_inline_comment(f)}

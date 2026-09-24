@@ -13,17 +13,21 @@ from aspm_cli.pr_decorator.adapters import (  # noqa: E402
     detect_loader, load_all_findings, load_findings_checkov, load_findings_gitleaks_sarif,
     load_findings_secret, load_findings_trivy, load_findings_trufflehog_jsonl,
 )
+from aspm_cli.pr_decorator.pr_summary import (  # noqa: E402
+    _extract_symbols, generate_pr_narrative, render_extra_sections, render_file_changes_table,
+    render_flow_diagram, render_narrative,
+)
 from aspm_cli.pr_decorator.remediation import enrich_with_remediation  # noqa: E402
 from aspm_cli.pr_decorator.render import (  # noqa: E402
-    FINDING_MARKER_RE, compute_event, gate_status, load_findings, render_inline_comment,
-    render_severity_section, render_summary_comment,
+    FINDING_MARKER_RE, MAX_DETAILED_PER_SEVERITY, compute_event, gate_status, load_findings,
+    render_finding_detail, render_inline_comment, render_severity_section, render_summary_comment,
 )
 
 
 def f(severity, path="a.py", line=1, fp="fp1", cwe=None):
-    return {"path": path, "start_line": line, "severity": severity, "rule_id": "x.rule",
+    return {"path": path, "start_line": line, "end_line": line, "severity": severity, "rule_id": "x.rule",
             "cwe": cwe or [], "fingerprint": fp, "source": "AccuKnox SAST", "message": "m",
-            "code": "", "fix": None}
+            "code": "", "fix": None, "owasp": None, "references": [], "category": "sast"}
 
 
 def test_gate_status():
@@ -336,6 +340,92 @@ def test_load_findings_secret_dispatches_by_extension():
     finally:
         os.unlink(jsonl_path)
         os.unlink(sarif_path)
+
+
+def test_unknown_severity_never_itemized_in_summary():
+    # Checkov OSS never sets real severity - every IaC finding lands here.
+    # A wall of unrated findings is noise, not signal (see DISPLAYED_SEVERITIES).
+    findings = [f("UNKNOWN", fp=f"fp{i}") for i in range(5)]
+    body = render_summary_comment(findings, {"repo": "o/r", "ref": "main", "sha": "abc"})
+    assert "No rated issues found" in body
+    assert "5 additional finding" in body
+    assert "UNKNOWN Issues" not in body  # never an itemized section for it
+    # the exclusion lives in render_summary_comment's DISPLAYED_SEVERITIES loop,
+    # not in render_severity_section itself - calling it directly still works
+    assert render_severity_section(findings, "UNKNOWN") != ""
+
+
+def test_unknown_mixed_with_rated_findings_still_excluded():
+    findings = [f("HIGH"), f("UNKNOWN", fp="fp2")]
+    body = render_summary_comment(findings, {"repo": "o/r", "ref": "main", "sha": "abc"})
+    assert "Found **1 finding(s)**" in body  # headline excludes the UNKNOWN one
+    assert "1 additional finding(s) with no severity signal" in body
+    assert "UNKNOWN Issues" not in body
+
+
+def test_render_finding_detail_includes_cwe_owasp_references():
+    finding = f("HIGH", cwe=["CWE-89"])
+    finding["owasp"] = ["A03:2021 - Injection"]
+    finding["references"] = ["https://example.com/doc"]
+    detail = render_finding_detail(finding, 1)
+    assert "CWE-89" in detail
+    assert "A03:2021" in detail
+    assert "https://example.com/doc" in detail
+    assert "<details>" in detail and "</details>" in detail
+
+
+def test_severity_section_caps_detail_and_falls_back_to_index():
+    findings = [f("HIGH", path=f"f{i}.py", fp=f"fp{i}") for i in range(MAX_DETAILED_PER_SEVERITY + 3)]
+    section = render_severity_section(findings, "HIGH")
+    assert section.count("<details>") == MAX_DETAILED_PER_SEVERITY + 1  # +1 for the "+N more" wrapper
+    assert "+ 3 more HIGH finding(s)" in section
+
+
+def test_summary_comment_never_exceeds_hard_size_cap():
+    # Many files, many severities, long messages - well beyond what real
+    # per-finding/per-severity caps alone are tuned for.
+    findings = []
+    for i in range(200):
+        sev = ["CRITICAL", "HIGH", "MEDIUM", "LOW"][i % 4]
+        ff = f(sev, path=f"file{i}.py", line=i + 1, fp=f"fp{i}")
+        ff["message"] = "a very long finding message. " * 50
+        findings.append(ff)
+    body = render_summary_comment(findings, {"repo": "o/r", "ref": "main", "sha": "abc"})
+    assert len(body) <= 60000
+
+
+def test_extract_symbols_python_and_terraform():
+    diff = (
+        "+def handle_request(req):\n"
+        "+    pass\n"
+        '+resource "aws_s3_bucket" "logs" {\n'
+        "-def old_unused(x):\n"  # removed line must not contribute
+    )
+    symbols = _extract_symbols(diff)
+    assert symbols == ["handle_request", "logs"]
+
+
+def test_render_file_changes_table_caps_and_notes_remainder():
+    rows = [{"path": f"f{i}.py", "added": "1", "deleted": "0", "symbols": []} for i in range(15)]
+    table = render_file_changes_table(rows)
+    assert table.count("| `f") == 10  # _MAX_FILES_IN_TABLE
+    assert "and 5 more file(s)" in table
+
+
+def test_generate_pr_narrative_skipped_without_key_or_diff():
+    assert generate_pr_narrative([{"path": "a"}], [], api_key=None) is None
+    assert generate_pr_narrative(None, [], api_key="key") is None
+
+
+def test_render_flow_diagram_empty_without_findings():
+    assert render_flow_diagram([]) == ""
+    diagram = render_flow_diagram([f("HIGH", path="a.py")])
+    assert "```mermaid" in diagram
+    assert "a.py" in diagram
+
+
+def test_render_extra_sections_all_empty_produces_empty_string():
+    assert render_extra_sections(None, None, []) == ""
 
 
 if __name__ == "__main__":
