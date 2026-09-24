@@ -74,5 +74,21 @@ class GitHubProvider(PRProvider):
             return
 
         resp = requests.post(url, json=payload, headers=self._headers(), timeout=_TIMEOUT)
+        if resp.status_code == 422 and comments:
+            # GitHub rejects the *entire* review if even one inline comment's
+            # line isn't part of the PR's diff hunks (this CLI only scopes
+            # findings by file via --changed-files, not by which lines are
+            # actually in the diff - see adapters.py; a finding on an
+            # untouched line in an otherwise-changed file triggers this).
+            # Degrade to a comment-only review rather than losing the whole
+            # post - including the summary/gate result - over one bad line.
+            logger.warning(
+                f"GitHub rejected {len(comments)} inline comment(s) (422: {resp.text[:300]}) - "
+                f"likely one or more finding lines aren't part of the PR diff. Posting the "
+                f"summary/gate result without inline comments instead of failing outright."
+            )
+            payload["comments"] = []
+            resp = requests.post(url, json=payload, headers=self._headers(), timeout=_TIMEOUT)
+
         resp.raise_for_status()
         logger.info(f"Review posted: {resp.status_code}")
